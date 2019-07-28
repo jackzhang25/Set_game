@@ -2,6 +2,7 @@ import random
 colors = ["r","g","b"]
 shading = ["full", "shaded", "empty"]
 shape = ["diamond", "oval", "rectangle"]
+number = [1,2,3]
 class setGame:
     def __init__(self):
         self.deck = None
@@ -16,8 +17,8 @@ class setGame:
         return repr_str
     def generateDeck(self):
         deck = []
-        for i in range(1,4):
-            num = i 
+        for nums in number:
+            num = nums
             for col in colors:
                 color = col
                 for shade in shading:
