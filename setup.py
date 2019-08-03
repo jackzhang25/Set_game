@@ -32,3 +32,13 @@ if __name__ == '__main__':
     deck = setGame()
     deck.shuffle()
     print(deck)
+def getStartingCards(set_deck):
+    r_deck = []
+    for i in range(0, 12):
+        r_deck.append(set_deck[i])
+    return r_deck
+def checkSame(l1,l2,l3):
+    for i in range(0, 4):
+        if l1[i] == l2[i] == l3[i]:
+            return True
+        return False
