@@ -3,6 +3,7 @@ colors = ["r","g","b"]
 shading = ["full", "shaded", "empty"]
 shape = ["diamond", "oval", "rectangle"]
 number = [1,2,3]
+startingDeck = []
 class setGame:
     def __init__(self):
         self.deck = None
@@ -31,7 +32,7 @@ class setGame:
 if __name__ == '__main__':
     deck = setGame()
     deck.shuffle()
-    print(deck)
+    
 def getStartingCards(set_deck):
     r_deck = []
     for i in range(0, 12):
@@ -42,3 +43,22 @@ def checkSame(l1,l2,l3):
         if l1[i] == l2[i] == l3[i]:
             return True
         return False
+def checkDifferent(li1,li2,li3):
+    for i in range(0, 4):
+        rval = 0
+        if li1[i] != li2[i] != li3[i]:
+            rval += 1
+            continue
+    if rval < 3:
+        return False
+    return True
+
+startingDeck = getStartingCards(deck)
+
+for i in range(0, 12):
+    for j in range(1, 12):
+        for k in range(2,12):
+            if checkSame(deck[i],deck[j],deck[k]) or checkDifferent(deck[i],deck[j],deck[k]):
+                print(deck[i],deck[j],deck[k])
+
+
