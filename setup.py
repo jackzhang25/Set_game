@@ -58,7 +58,7 @@ startingDeck = getStartingCards(deck)
 for i in range(0, 12):
     for j in range(1, 12):
         for k in range(2,12):
-            if checkSame(deck[i],deck[j],deck[k]) or checkDifferent(deck[i],deck[j],deck[k]):
+            if checkSame(deck[i],deck[j],deck[k]) or checkDifferent(deck[i],deck[j],deck[k]) and deck[i] != deck[j] != deck[k]:
                 print(deck[i],deck[j],deck[k])
 
 
