@@ -30,35 +30,38 @@ class setGame:
     def shuffle(self):
         random.shuffle(self.deck)
 if __name__ == '__main__':
-    deck = setGame()
-    deck.shuffle()
+    game = setGame()
+    game.shuffle()
     
-def getStartingCards(set_deck):
+def getStartingCards(sdeck):
     r_deck = []
     for i in range(0, 12):
-        r_deck.append(set_deck[i])
+        r_deck.append(sdeck[i])
     return r_deck
+
+
 def checkSame(l1,l2,l3):
     for i in range(0, 4):
-        if l1[i] == l2[i] == l3[i]:
-            return True
-        return False
-def checkDifferent(li1,li2,li3):
-    for i in range(0, 4):
-        rval = 0
-        if li1[i] != li2[i] != li3[i]:
-            rval += 1
-            continue
-    if rval < 3:
-        return False
+        if not (l1[i] == l2[i] and l2[i] == l3[i]) and not (l1[i] != l2[i] and l2[i] != l3[i] and l1[i] != l3[i]):
+            return False
+        
     return True
 
-startingDeck = getStartingCards(deck)
 
-for i in range(0, 12):
-    for j in range(1, 12):
-        for k in range(2,12):
-            if checkSame(deck[i],deck[j],deck[k]) or checkDifferent(deck[i],deck[j],deck[k]) and deck[i] != deck[j] != deck[k]:
-                print(deck[i],deck[j],deck[k])
+
+
+
+if __name__ == '__main__':
+    game = setGame()
+    game.shuffle()
+    startingDeck = [["3","g","empty","rectangle"],["1","r","shaded","rectangle"],["3","r","empty","diamond"],["1","g","full","oval"],["3","g","full","diamond"],["3","g","empty","oval"],["3","g","shaded","diamond"],["3","g","full","rectangle"],["3","r","shaded","oval"],["3","g","shaded","oval"], ["1","g","full","rectangle"], ["3","g","empty","diamond"]]            #getStartingCards(game.deck)
+    for i in range(0,12):
+        print("card: " + str(startingDeck[i]))
+
+    for i in range(0, 12):
+        for j in range(i+1, 12):
+            for k in range(j+1,12):
+                if checkSame(startingDeck[i],startingDeck[j],startingDeck[k]):
+                    print(startingDeck[i],startingDeck[j],startingDeck[k])
 
 
