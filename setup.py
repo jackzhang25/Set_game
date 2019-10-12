@@ -29,9 +29,6 @@ class setGame:
         self.deck = deck
     def shuffle(self):
         random.shuffle(self.deck)
-if __name__ == '__main__':
-    game = setGame()
-    game.shuffle()
     
 def getStartingCards(sdeck):
     r_deck = []
@@ -41,11 +38,38 @@ def getStartingCards(sdeck):
 
 
 def checkSame(l1,l2,l3):
-    for i in range(0, 4):
-        if not (l1[i] == l2[i] and l2[i] == l3[i]) and not (l1[i] != l2[i] and l2[i] != l3[i] and l1[i] != l3[i]):
+    for i in range(3):
+        if l1[i] == l2[i] and l2[i] == l3[i] or l1[i] != l2[i] and l2[i] != l3[i]:
+            continue
+        else:
             return False
-        
     return True
+
+def playerCards(input):
+    rval = []
+    cardNum = ""
+    if input[0] == "1":
+        rval.append("1")
+    else:
+        rval.append("2")
+    for i in range(2, len(input)):
+        if input[i] == " ":
+            rval.append(cardNum)
+            cardNum = ""
+        else:
+            cardNum += input[i]
+    rval.append(cardNum)
+    return rval 
+
+def removeCards(li, x, y, z):
+    li.remove(x)
+    li.remove(y)
+    li.remove(z)
+def printCards(li):
+   for i in range(12):
+        print("card " + str((i + 1)) + ": " + str(li[i]) )
+
+
 
 
 
@@ -54,14 +78,31 @@ def checkSame(l1,l2,l3):
 if __name__ == '__main__':
     game = setGame()
     game.shuffle()
-    startingDeck = [["3","g","empty","rectangle"],["1","r","shaded","rectangle"],["3","r","empty","diamond"],["1","g","full","oval"],["3","g","full","diamond"],["3","g","empty","oval"],["3","g","shaded","diamond"],["3","g","full","rectangle"],["3","r","shaded","oval"],["3","g","shaded","oval"], ["1","g","full","rectangle"], ["3","g","empty","diamond"]]            #getStartingCards(game.deck)
-    for i in range(0,12):
-        print("card: " + str(startingDeck[i]))
+    startingCards = getStartingCards(game.deck)
+    player1 = 0
+    player2 = 0
+    guess = input("Press enter when ready ")
+    printCards(startingCards)
+    while len(startingCards) >= 3:
+        guess = input("Enter player number then the three cards you want to guess(with spaces): ")
+        if guess == "stop":
+            break
+        cards = playerCards(guess)
+        print(cards)
+        if checkSame(startingCards[int(cards[1]) - 1], startingCards[int(cards[2]) - 1], startingCards[int(cards[3]) - 1]):
+            if int(cards[0]) == 1:
+                player1 += 1
+            else:
+                player2 += 1
+            print("Player1 score: " + str(player1))
+            print("Player2 score: " + str(player2))
+            removeCards(game.deck, startingCards[int(cards[1]) - 1], startingCards[int(cards[2]) - 1], startingCards[int(cards[3]) - 1])
+            startingCards = getStartingCards(game.deck)
+            printCards(startingCards)
+        else:
+            print("That was not a set. Try again")
+        
+        
 
-    for i in range(0, 12):
-        for j in range(i+1, 12):
-            for k in range(j+1,12):
-                if checkSame(startingDeck[i],startingDeck[j],startingDeck[k]):
-                    print(startingDeck[i],startingDeck[j],startingDeck[k])
 
 
