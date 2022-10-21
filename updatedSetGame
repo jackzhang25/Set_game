@@ -1,0 +1,576 @@
+#given a hsv image find the number of white, black, and other colored pixels 
+import cv2 as cv
+import numpy as np
+import matplotlib.pyplot as pl
+import skimage.io as io
+import webcolors as wc
+# This routine helps us line the points of a contour soi that we traverse it in a direction starting from the point
+# closest to the origin. It also reshapes the input
+def rectify(h):
+    result = False
+    hnew   = None
+    try:
+        h = h.reshape((4,2))
+        hnew = np.zeros((4,2),dtype = np.float32)
+
+        add = h.sum(1)
+        hnew[0] = h[np.argmin(add)]
+        hnew[2] = h[np.argmax(add)]
+   
+        diff = np.diff(h,axis = 1)
+        hnew[1] = h[np.argmin(diff)]
+        hnew[3] = h[np.argmax(diff)]
+        result = True
+    except:
+        print("error converting contour")
+  
+    return result,hnew
+# Increase the brightness of an image. This requires translation between one color space to another
+def increase_brightness(img, value=30):
+    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    h, s, v = cv.split(hsv)
+
+    lim = 255 - value
+    v[v > lim] = 255
+    v[v <= lim] += value
+
+    final_hsv = cv.merge((h, s, v))
+    img = cv.cvtColor(final_hsv, cv.COLOR_HSV2BGR)
+    return img
+# These routines convert an RGB tuple into a color name.
+def closest_colour(rc):
+    requested_colour = tuple(map(int,rc))
+    min_colours = {}
+    for key, name in wc.CSS3_HEX_TO_NAMES.items():
+        r_c, g_c, b_c = wc.hex_to_rgb(key)
+        rd = (r_c - requested_colour[0]) ** 2
+        gd = (g_c - requested_colour[1]) ** 2
+        bd = (b_c - requested_colour[2]) ** 2
+        min_colours[(rd + gd + bd)] = name
+    return min_colours[min(min_colours.keys())]
+
+def get_colour_name(requested_colour):
+    try:
+        closest_name = actual_name = wc.rgb_to_name(requested_colour)
+    except ValueError:
+        closest_name = closest_colour(requested_colour)
+        actual_name = None
+    return actual_name, closest_name
+# Extract the card features. We will assume that the input image is properly oriented. 
+# This routine will return the shapes and their colors
+
+def extract_card_details(card_img) :
+    # brighten the image to remove shadows and extract color information
+    img = increase_brightness(card_img,60)
+    
+    # make a copy of the image for debugging purposes.
+    debug_img = img.copy()
+    
+    #convert the image to a gray colored image - this will help us detect the shape opf the card reliably
+    gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
+    
+    # this will soften the edges. This will ensure that we can detect continlous edges as we trace the contour
+    blur = cv.GaussianBlur(gray,(5,5),1000)
+    
+    # This will reduce the gray color to a black and white image. only tow types of pixels - white and black
+    flag, thresh = cv.threshold(blur, 175, 255, cv.THRESH_BINARY) 
+
+    #This will help extract the contours of the cards from the picture
+    # The findcontours routine will treat the first non-black color as a foreground color. This implies that
+    # the largets contour we will find will be the outline of the card. We will need to ignore it to look at the
+    # set of contours to track the shgapes. We expect upto three shapes at the highest level.
+    contours, hierarchy = cv.findContours(thresh,cv.RETR_TREE,cv.CHAIN_APPROX_NONE)
+    
+    num_contours = len(contours)
+    if num_contours > 4 :
+        num_contours = 4
+  
+    contours = sorted(contours, key=cv.contourArea,reverse=True)[:num_contours]  
+    
+    # skip the biggest contour. This corresponds to the outline opf the image
+    contours = contours[1:num_contours]
+    num_contours = num_contours - 1
+    
+    shapes = []
+    
+    for i in range(0,num_contours) :
+        shape = contours[i]
+        peri = cv.arcLength(shape,True)
+        area = cv.contourArea(shape)
+        
+        cv.drawContours(debug_img,[contours[i]],0,(255,255,0),10)
+        
+        # extract the color of the shape
+        mask = np.zeros(img.shape[:2], dtype="uint8")
+        cv.drawContours(mask, [contours[i]], -1, 255, -1)
+        mask = cv.erode(mask, None, iterations=2)
+        mean = cv.mean(img, mask=mask)[:3] 
+        fill_colour = get_colour_name(tuple(map(int,mean)))
+        
+        shapes.append((peri,area,fill_colour))
+
+    return shapes,debug_img,thresh
+ERROR_TOLERANCE = 10 # in percentage. If the differences in the perimeter of the card detected is within 10% we pass
+
+MAX_IMAGE_WIDTH_INDEX = 749
+MAX_IMAGE_HEIGHT_INDEX = 749
+
+IMAGE_WIDTH = 750
+IMAGE_HEIGHT = 750
+
+# for debugging purposes we will create a copy of the image passed to extract_card. 
+img_copy_debug = None
+
+def extract_contours(img, img_width = IMAGE_WIDTH, img_height = IMAGE_HEIGHT) :
+    # if required for debugging
+    img_copy_debug = img.copy()
+    
+    # convert the image into a gray (differentbshades of black and white) image
+    gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
+    
+    #blur the image to smoothen the edges. This will allow us to extract edge information
+    blur = cv.GaussianBlur(gray,(1,1),1000)
+    
+    # convert the image for crisp boundaries. Now the image will either contain white or black pixels
+    flag, thresh = cv.threshold(blur, 120, 255, cv.THRESH_BINARY) 
+    
+    #extract the contours of the cards from the binary image
+    contours, hierarchy = cv.findContours(thresh,cv.RETR_TREE,cv.CHAIN_APPROX_SIMPLE)
+
+    return contours
+
+def extract_card(img, img_width = IMAGE_WIDTH, img_height = IMAGE_HEIGHT) :
+    # if required for debugging
+    img_copy_debug = img.copy()
+    
+    # convert the image into a gray (differentbshades of black and white) image
+    gray = cv.cvtColor(img,cv.COLOR_BGR2GRAY)
+    
+    #blur the image to smoothen the edges. This will allow us to extract edge information
+    blur = cv.GaussianBlur(gray,(1,1),1000)
+    
+    # convert the image for crisp boundaries. Now the image will either contain white or black pixels
+    flag, thresh = cv.threshold(blur, 120, 255, cv.THRESH_BINARY) 
+    
+    #extract the contours of the cards from the binary image
+    contours, hierarchy = cv.findContours(thresh,cv.RETR_TREE,cv.CHAIN_APPROX_SIMPLE)
+    
+    # pick only the large contours corresponding to the cards
+    contours = sorted(contours, key=cv.contourArea,reverse=True) 
+    
+    # we need to figure out the number of cards in the image. For most rounds it will be 12
+    # only towards the end of the game we have the potential to have fewer than 12 cards.
+    #
+    # this is a tough case to detect because we need to determnine what constitutes a card.
+    # There is an implicit assumption that we are making here that the largest contour 
+    # will correspond to a playting card in the picture. When this is violated the code will not work.
+    # also we will get spurious cards if we manage 
+    
+    
+    
+    
+    numcards = 12
+        
+    for card in contours:
+        peri = cv.arcLength(card,True)
+        result,approx = rectify(cv.approxPolyDP(card,0.02*peri,True))
+
+        if result :        
+            # for debugging purposes
+            # debug ouput. if we want to see the card that we are outputting, uncomment the following five lines.
+            box = np.int0(approx)
+            cv.drawContours(img_copy_debug,[box],0,(255,255,0),15)
+            io.imshow(img_copy_debug)       
+            # end debugginng section
+        
+            h = np.array([ [0,0],
+                       [MAX_IMAGE_WIDTH_INDEX,0],
+                       [MAX_IMAGE_WIDTH_INDEX, MAX_IMAGE_HEIGHT_INDEX],
+                       [0,MAX_IMAGE_HEIGHT_INDEX]],np.float32)
+    
+            transform = cv.getPerspectiveTransform(approx,h)
+            warp = cv.warpPerspective(img,transform,(IMAGE_WIDTH,IMAGE_HEIGHT))
+
+            yield warp
+
+
+# go through image for top two colors 
+
+
+#to find to color use the colors as (x, y, z) points and see if it is closer to white red blue or green
+import turicreate as tc
+import imageio
+from skimage import data
+from skimage.exposure import histogram
+import skimage.io as io
+import webcolors
+import matplotlib.pyplot as plt
+import colorthief as ct
+#Converts image to 1s and 0s where 0s are black and 1s are white, used to find shape, texture, and number
+def convertTo1s0s(image):
+    newImage = []
+    newRow = []
+    for i in range(len(image)):
+        for j in range(len(image[0])):
+            sat = image[i][j][1]
+            if sat > 50:
+                newRow.append(0)
+            else:
+                newRow.append(1)
+        newImage.append(newRow)
+        newRow = []
+    return newImage
+#Counting number of black pixels in each row, and the total number of black pixels, used to find shape, texture, and number
+def countBlack(image):
+    im = convertTo1s0s(image)
+    numBlackArray = []
+    total = 0
+    for i in range(len(im)):
+        num = 0
+        for j in range(len(im[0])):
+            if im[i][j] == 0:
+                num += 1
+        numBlackArray.append(num)
+        total += num
+        
+    return (numBlackArray, total)
+#Gets all the traits of the image
+#Second param of Arrays() is the buffer when getting the indexes of the colors, the minimum thickness of an empty 
+#shape is around 10
+buffer = 0
+# The buffer gets changed because when the shape is stripped there are more stray pixels 
+bufferIfStripped = 0
+def getTraitsOfCard(ima, coloredImage):
+    colored = cv.cvtColor(coloredImage, cv.COLOR_RGB2HSV)
+    image = convertTo1s0s(colored)
+    colList = getColWithColor(image)
+    n = 0
+    for nu in colList:
+        if (nu == 0):
+            n += 1
+    tupleArray = Arrays(image, buffer)
+    numBlackPixelsInRowArray,totalBlackPixels = countBlack(colored)
+    numChangesArray = getNumChanges(tupleArray)
+    texture = checkTexture(image)
+    print(texture)
+    number = checkNumber(colList)
+    print(number)
+    shape = checkShape(n, number, image)
+    print(shape)
+    color = getColor(colored)
+    print(color)
+    return [texture, number, shape, color]
+def getColWithColor(ima):
+    columnList = []
+    added = False
+    for i in range(len(ima[0])):
+        for j in range(len(ima)):
+            if ima[j][i] == 0:
+                columnList.append(0)
+                added = True
+                break
+        if (not added):
+            columnList.append(1)
+        added = False
+        
+    for i in range(10):
+        columnList.remove(columnList[0])
+        columnList.pop()
+    
+    
+    return columnList
+def getRowWithColor(ima):
+    rowList = []
+    added = False
+    for i in range(len(ima[0])):
+        for j in range(len(ima)):
+            if ima[i][j] == 0:
+                rowList.append(0)
+                added = True
+                break
+        if (not added):
+            rowList.append(1)
+        added = False
+        
+    for i in range(10):
+        rowList.remove(rowList[0])
+        rowList.pop()
+    val = 0
+    for num in rowList:
+        if num == 0:
+            val += 1
+    return val
+                
+#Gets the shape based on the number of black pixels
+#149 squiggle
+#169 oval
+#227 diamond
+#black is the numebr of columns with black pixels so it checks the width of the shape and based on that, it gets the shape
+#find first column with color and check up and down
+def checkShape(black, num, img):
+    mid = int(len(img) / 2)
+    diff = getFirstColor(img, mid) - getFirstColor(img, mid + 75)
+    if diff >= 10:
+        return "squiggle"
+    elif diff <= -10:
+        return "diamond"
+    else:
+        return "oval"
+    
+
+    
+    
+    
+
+#Gets the number based on the number of changes in the shape
+def checkNumber(colArray):
+    numChanges = 0
+    for i in range(len(colArray) - 1):
+        if colArray[i] != colArray[i+1]:
+            numChanges += 1
+    if numChanges == 2:
+        return "1"
+    elif numChanges == 4:
+        return "2"
+    else:
+        return "3"
+    
+    
+    
+
+#Gets the texture based on the number of changes in the shape
+
+#check small chunk of center of shape
+def checkTexture(image):
+    m = int(len(image) / 2)
+    fColor = getFirstColor(image, m) + 30 
+    mid = int(len(image) / 2)
+    c = 0
+    for i in range(mid - 40, mid + 40):
+        for j in range(fColor, fColor + 20):
+            if image[i][j] == 0:
+                c += 1
+    if c < 50:
+        return "empty"
+    elif c > 700:
+        return "full"
+    else:
+        return "stripped"
+
+    
+    
+    
+    
+    #middleIndex = array[int(len(array)/2)]
+    #if getIfStripped(image):
+    #    return "stripped"
+    #Checks 10 rows in the middle, if there is a difference, then its stripped 
+    #for i in range(int(len(array)/2), int(len(array)/2) + checkNumRows):
+     #   if array[i] != array[i+1]:
+      #      return "stripped"
+    #if middleIndex == 2 or middleIndex == 6:
+    #    return "full"
+    #elif middleIndex == 8 or middleIndex == 12:
+    #    return "empty"
+    #elif middleIndex == 4:
+    #    return ifIs4(numBlackArray[int(len(numBlackArray) / 2)])[0]
+def getFirstColor(im, index):
+    for i in range(len(im)):
+        if im[index][i] == 0:
+            return i
+#Finds the number based on the number of changes of the full shape
+def checkNumberIfStripped(array, i, im):
+    if i == 2:
+        return "1"
+    elif i == 6:
+        return "3"
+    elif i == 8:
+        return "2"
+    elif i == 12:
+        return "3"
+    elif i == 4:
+        return ifIs4(im)[-1]
+#Four changes is a special case so based on the number of black pixels in the middle row
+def ifIs4(numBlackPixels):
+    if numBlackPixels < 350:
+        return ["empty" , "1"]
+    else:
+        return ["full", "2"]
+
+def checkColorSame(color1, color2):
+    if color1 == color2:
+        return True
+    return False
+#Uses the value returned from the Arrays method to find the number of changes in each row of the image 
+def getNumChanges(arr):
+    rlist = []
+    for i in range(0, len(arr)):
+        rlist.append(len(arr[i])*2)
+    return rlist
+#Returns a tuple array of where the segments of black pixels are 
+def Arrays(x, buffer):
+    array = []
+    bgColor = x[0][0]
+    for i in range(0, len(x)):
+        currArray = []
+        lengthColor = 0
+        startColor = 0
+        for j in range(0, len(x[0])):
+            if not checkColorSame(x[i][j], bgColor):
+                if startColor == 0:
+                    startColor = j
+                lengthColor += 1
+            elif lengthColor > buffer:
+                currArray.append((startColor, lengthColor))
+                lengthColor = 0
+                startColor = 0
+        array.append(currArray)   
+    return array 
+
+def getIfStripped(ar):
+    firstColor = 0
+    numChanges = 0
+    for i in range(len(ar)):
+        index = int(len(ar) / 2)
+        if ar[index][i] == 0:
+            firstColor = i
+            break
+    for j in range(len(ar[0]) - 1):
+        if ar[j][firstColor + 50] != ar[j+1][firstColor + 50]:
+            numChanges += 1
+    print("num" + str(numChanges))
+    return numChanges > 4
+def getColor(image):
+    values = {"white" : 0,"black" :0, "red" : 0,"yellow" : 0,"green" : 0,"blue" : 0,"purple" : 0}
+    shape = image.shape
+    for i in range(shape[0]):
+        for j in range(shape[1]):
+            hue = image[i][j][0]
+            if image[i][j][1] < 100:
+                values["white"] += 1
+            elif image[i][j][2] < 50:
+                values["black"] += 1
+            elif hue <= 10 or hue > 170:
+                values["red"] += 1
+            elif hue > 50 and hue <= 70:
+                values["green"] += 1
+            elif hue > 110 and hue <= 130:
+                values["blue"] += 1
+    print(values)
+    red = values["red"]
+    green = values["green"]
+    purple = values["blue"] + values["purple"]
+    if red > green and red > purple:
+        return "red"
+    elif green > red and green > purple:
+        return "green"
+    else:
+        return "purple"
+    
+        
+        
+
+        
+            
+def getSets(cards):
+    for i in range(len(cards)):
+        for j in range(i+1, len(cards)):
+            for k in range(j+1, len(cards)):
+                if checkIfSet(cards[i], cards[j], cards[k]):
+                    print(cards[i] + " " + card[j] + " " + cards[k])
+def checkIfSet(card1, card2, card3):
+    for i in range(3):
+        if not card1[i] == card2[i] == card3[i] or card1[i] != card2[i] != card3[i]:
+            return False
+    return True
+# we need a picture with 12 set cards placed in them. It can be in any orientation.
+# also if it is not JPG we need to modify this doe tyo convert it into a RGB picture. 
+img = io.imread("/Users/jack/Downloads/Image.jpeg")
+#img=io.imread("/Users/Sethu/Documents/Setcard.jpg")
+io.imshow(img)
+#227
+image_iterator = extract_card(img)
+set_card = next(image_iterator)
+
+
+cards = []
+image_iterator = extract_card(img)
+for i in range(12):
+    set_card = next(image_iterator)
+    details,debug_img,thresh=extract_card_details(set_card)
+    io.imshow(set_card)
+    card = getTraitsOfCard(thresh, set_card)
+    cards.append(card)
+    print(card)
+print(cards)
+
+image_iterator = extract_card(img)
+
+set_card = next(image_iterator)
+details,debug_img,thresh=extract_card_details(set_card)
+card = getTraitsOfCard(thresh, set_card)
+io.imshow(set_card)
+
+#set_card = next(image_iterator)
+details,debug_img,thresh=extract_card_details(set_card)
+card = getTraitsOfCard(thresh, set_card)
+io.imshow(set_card)
+
+thresh.shape
+#set_card = next(image_iterator)
+details,debug_img,thresh=extract_card_details(set_card)
+card = getTraitsOfCard(thresh, set_card)
+io.imshow(set_card)
+io.imshow(thresh)
+print(thresh[300][400])
+io.imshow(thresh)
+print(thresh[0][0])
+#oval - 536, 548
+#diamond - 551, 545, 561
+
+set_card=next(image_iterator)
+details,debug_img,thresh=extract_card_details(set_card)
+io.imshow(set_card)
+
+io.imshow(thresh)
+details,debug_img,thresh=extract_card_details(set_card)
+io.imshow(debug_img)
+
+details
+io.imshow(thresh)
+getTraitsOfCard(thresh, set_card)
+io.imshow(set_card)
+
+set_card=next(image_iterator)
+io.imshow(set_card)
+
+details,debug_img,thresh=extract_card_details(set_card)
+io.imshow(debug_img)
+print(getTraitsOfCard(debug_img, set_card)
+details
+io.imshow(thresh)
+getTraitsOfCard(thresh)
+set_card=next(image_iterator)
+io.imshow(set_card)
+print(getColor(set_card[int(len(set_card) / 2)]))
+io.imsave("/Users/jack/foo4.jpg", set_card)
+details,debug_img,thresh=extract_card_details(set_card)
+io.imshow(debug_img)
+details
+io.imshow(thresh)
+getTraitsOfCard(thresh)
+set_card=next(image_iterator)
+io.imshow(set_card)
+details,debug_img,thresh=extract_card_details(set_card)
+io.imshow(debug_img)
+details
+io.imshow(thresh)
+getTraitsOfCard(thresh)
+set_card=next(image_iterator)
+io.imshow(set_card)
+set_card=next(image_iterator)
+io.imshow(set_card)
+set_card=next(image_iterator)
+io.imshow(set_card)
+set_card=next(image_iterator)
+io.imshow(set_card)
